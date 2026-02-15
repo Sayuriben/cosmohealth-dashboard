@@ -26,21 +26,22 @@
                 
                 // Analyze data
                 const total = records.length;
-                const approved = records.filter(r => r.clinicianDecision === 'Approve' || r.clinicianDecision === 'approve').length;
-                const declined = records.filter(r => r.clinicianDecision === 'Decline' || r.clinicianDecision === 'decline').length;
-                const pending = records.filter(r => !r.clinicianDecision || r.clinicianDecision === '').length;
+                const approved = records.filter(r => (r.clinicianDecision || r['Clinician decision'] || '').toLowerCase() === 'approve').length;
+                const declined = records.filter(r => (r.clinicianDecision || r['Clinician decision'] || '').toLowerCase() === 'decline').length;
+                const pending = records.filter(r => !(r.clinicianDecision || r['Clinician decision'])).length;
                 const approvalRate = total > 0 && (approved + declined) > 0 ? Math.round((approved / (approved + declined)) * 100) : 0;
                 
                 // Group by antibiotic
                 const byAntibiotic = {};
                 records.forEach(r => {
-                    const abx = r.currentAntibiotic || 'Unknown';
+                    const abx = r.currentAbx || r.currentAntibiotic || 'Unknown';
                     if (!byAntibiotic[abx]) {
                         byAntibiotic[abx] = { name: abx, approved: 0, declined: 0 };
                     }
-                    if (r.clinicianDecision === 'Approve' || r.clinicianDecision === 'approve') {
+                    const decision = (r.clinicianDecision || r['Clinician decision'] || '').toLowerCase();
+                    if (decision === 'approve') {
                         byAntibiotic[abx].approved++;
-                    } else if (r.clinicianDecision === 'Decline' || r.clinicianDecision === 'decline') {
+                    } else if (decision === 'decline') {
                         byAntibiotic[abx].declined++;
                     }
                 });
@@ -134,19 +135,19 @@
                                         ${records.slice(0, 10).map((row, idx) => `
                                             <tr class="border-b border-slate-700 hover:bg-slate-700/50">
                                                 <td class="py-3 px-4 text-slate-200">${row.patientName || 'N/A'}</td>
-                                                <td class="py-3 px-4 text-slate-200">${row.currentAntibiotic || 'N/A'}</td>
+                                                <td class="py-3 px-4 text-slate-200">${row.currentAbx || row.currentAntibiotic || 'N/A'}</td>
                                                 <td class="py-3 px-4">
                                                     <span class="${
-                                                        row.clinicianDecision === 'Approve' || row.clinicianDecision === 'approve' 
+                                                        (row.clinicianDecision || row['Clinician decision'] || '').toLowerCase() === 'approve'
                                                             ? 'bg-emerald-500/20 text-emerald-400'
-                                                            : row.clinicianDecision === 'Decline' || row.clinicianDecision === 'decline'
+                                                            : (row.clinicianDecision || row['Clinician decision'] || '').toLowerCase() === 'decline'
                                                             ? 'bg-rose-500/20 text-rose-400'
                                                             : 'bg-amber-500/20 text-amber-400'
                                                     } px-3 py-1 rounded-full text-xs font-semibold">
-                                                        ${row.clinicianDecision || 'Pending'}
+                                                        ${(row.clinicianDecision || row['Clinician decision'] || 'Pending').charAt(0).toUpperCase() + (row.clinicianDecision || row['Clinician decision'] || 'Pending').slice(1).toLowerCase()}
                                                     </span>
                                                 </td>
-                                                <td class="py-3 px-4 text-slate-200">${Math.round((row.aiConfidenceScore || 0) * 100)}%</td>
+                                                <td class="py-3 px-4 text-slate-200">${Math.round((row.aiConfidenceScore || row['Ai confidence score'] || 0) * 100)}%</td>
                                             </tr>
                                         `).join('')}
                                     </tbody>
