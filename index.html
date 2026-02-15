@@ -164,6 +164,10 @@
                     return;
                 }
 
+                // Debug: log first record to see structure
+                console.log('First record:', records[0]);
+                console.log('All records:', records);
+
                 renderDashboard(records);
             } catch (error) {
                 console.error('Error:', error);
@@ -172,10 +176,16 @@
         }
 
         function renderDashboard(records) {
-            // Calculate metrics
+            // Calculate metrics - handle different column name formats
             const total = records.length;
-            const approved = records.filter(r => (r.clinicianDecision || '').toLowerCase() === 'approve').length;
-            const declined = records.filter(r => (r.clinicianDecision || '').toLowerCase() === 'decline').length;
+            const approved = records.filter(r => {
+                const decision = (r.clinicianDecision || r['Clinician decision'] || '').toLowerCase();
+                return decision === 'approve';
+            }).length;
+            const declined = records.filter(r => {
+                const decision = (r.clinicianDecision || r['Clinician decision'] || '').toLowerCase();
+                return decision === 'decline';
+            }).length;
             const pending = total - approved - declined;
             const approvalRate = approved + declined > 0 ? Math.round((approved / (approved + declined)) * 100) : 0;
 
@@ -192,9 +202,9 @@
             // Group by antibiotic
             const byAntibiotic = {};
             records.forEach(r => {
-                const abx = r.currentAbx || 'Unknown';
+                const abx = r.currentAbx || r['Current Abx'] || r['Current antibiotic'] || 'Unknown';
                 if (!byAntibiotic[abx]) byAntibiotic[abx] = { approved: 0, declined: 0 };
-                const decision = (r.clinicianDecision || '').toLowerCase();
+                const decision = (r.clinicianDecision || r['Clinician decision'] || '').toLowerCase();
                 if (decision === 'approve') byAntibiotic[abx].approved++;
                 else if (decision === 'decline') byAntibiotic[abx].declined++;
             });
@@ -202,9 +212,9 @@
             // Group by ward
             const byWard = {};
             records.forEach(r => {
-                const ward = (r.patientId || 'Unknown').substring(0, 3);
+                const ward = (r.patientId || r['Patient ID'] || 'Unknown').substring(0, 3);
                 if (!byWard[ward]) byWard[ward] = { approved: 0, declined: 0 };
-                const decision = (r.clinicianDecision || '').toLowerCase();
+                const decision = (r.clinicianDecision || r['Clinician decision'] || '').toLowerCase();
                 if (decision === 'approve') byWard[ward].approved++;
                 else if (decision === 'decline') byWard[ward].declined++;
             });
@@ -217,23 +227,31 @@
 
             // Populate table
             const tableBody = document.getElementById('tableBody');
-            tableBody.innerHTML = records.slice(0, 10).map((row, idx) => `
+            tableBody.innerHTML = records.slice(0, 10).map((row, idx) => {
+                const antibiotic = row.currentAbx || row['Current Abx'] || row['Current antibiotic'] || 'N/A';
+                const patientName = row.patientName || row['Patient Name'] || 'N/A';
+                const recommendation = row['De-escalation rec'] || row['deEscalationRecommendation'] || 'N/A';
+                const decision = (row.clinicianDecision || row['Clinician decision'] || '').toLowerCase();
+                const confidence = Math.round((row['Ai confidence score'] || row.aiConfidenceScore || 0) * 100);
+                
+                return `
                 <tr class="border-b border-slate-700 hover:bg-slate-700/50 transition-colors">
-                    <td class="py-4 px-6 text-slate-200">${row.patientName || 'N/A'}</td>
-                    <td class="py-4 px-6 text-slate-200">${row.currentAbx || 'N/A'}</td>
-                    <td class="py-4 px-6 text-slate-300 text-xs">${row['De-escalation rec'] || 'N/A'}</td>
+                    <td class="py-4 px-6 text-slate-200">${patientName}</td>
+                    <td class="py-4 px-6 text-slate-200">${antibiotic}</td>
+                    <td class="py-4 px-6 text-slate-300 text-xs">${recommendation}</td>
                     <td class="py-4 px-6">
                         <span class="${
-                            (row.clinicianDecision || '').toLowerCase() === 'approve' ? 'bg-emerald-500/20 text-emerald-400' :
-                            (row.clinicianDecision || '').toLowerCase() === 'decline' ? 'bg-rose-500/20 text-rose-400' :
+                            decision === 'approve' ? 'bg-emerald-500/20 text-emerald-400' :
+                            decision === 'decline' ? 'bg-rose-500/20 text-rose-400' :
                             'bg-amber-500/20 text-amber-400'
                         } px-3 py-1 rounded-full text-xs font-semibold">
-                            ${(row.clinicianDecision || 'Pending').charAt(0).toUpperCase() + (row.clinicianDecision || 'Pending').slice(1).toLowerCase()}
+                            ${decision ? decision.charAt(0).toUpperCase() + decision.slice(1) : 'Pending'}
                         </span>
                     </td>
-                    <td class="py-4 px-6 text-slate-200">${Math.round((row['Ai confidence score'] || 0) * 100)}%</td>
+                    <td class="py-4 px-6 text-slate-200">${confidence}%</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
 
             // Show dashboard
             document.getElementById('loading').classList.add('hidden');
@@ -328,7 +346,7 @@
         function createConfidenceChart(records) {
             const ctx = document.getElementById('confidenceChart').getContext('2d');
             if (confidenceChart) confidenceChart.destroy();
-            const confidenceData = records.map(r => (r['Ai confidence score'] || 0) * 100).slice(0, 20);
+            const confidenceData = records.map(r => ((r['Ai confidence score'] || r.aiConfidenceScore || 0) * 100)).slice(0, 20);
             confidenceChart = new Chart(ctx, {
                 type: 'line',
                 data: {
